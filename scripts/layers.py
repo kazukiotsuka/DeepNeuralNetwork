@@ -18,9 +18,9 @@ class MultiplicationLayer():
         self.in_2 = in_2
         return in_1 * in_2
 
-    def backward(self, out):
-        d1 = out * self.in_2
-        d2 = out * self.in_1
+    def backward(self, dout):
+        d1 = dout * self.in_2
+        d2 = dout * self.in_1
         return d1, d2
 
 
@@ -31,9 +31,9 @@ class AdditionLayer():
     def forward(self, in_1, in_2):
         return in_1 + in_2
 
-    def backward(self, out):
-        d1 = out * 1
-        d2 = out * 1
+    def backward(self, dout):
+        d1 = dout * 1
+        d2 = dout * 1
         return d1, d2
 
 
@@ -47,9 +47,9 @@ class ReLULayer():
         out[self.mask] = 0
         return out
 
-    def backward(self, out):
-        out[self.mask] = 0
-        dx = out
+    def backward(self, dout):
+        dout[self.mask] = 0
+        dx = dout
         return dx
 
 
@@ -62,8 +62,8 @@ class SigmoidLayer():
         self.out = out
         return out
 
-    def backward(self, out):
-        dx = out * (1.0 - self.out) * self.out
+    def backward(self, dout):
+        dx = dout * (1.0 - self.out) * self.out
         return dx
 
 
@@ -82,10 +82,10 @@ class HiddenLayer():
         out = np.dot(X, self.W) + self.b
         return out
 
-    def backward(self, out):
-        self.dW = np.dot(self.X.T, out)
-        self.db = np.sum(out, axis=0)
-        dx = np.dot(out, self.W.T)
+    def backward(self, dout):
+        self.dW = np.dot(self.X.T, dout)
+        self.db = np.sum(dout, axis=0)
+        dx = np.dot(dout, self.W.T)
         dx = dx.reshape(*self.original_x_shape)
         return dx
 
@@ -102,7 +102,7 @@ class SoftmaxWithLossLayer(NNOperations):
         self.cost = self.crossEntropyError(self.out, self.labels)
         return self.cost
 
-    def backward(self, out=1):
+    def backward(self, dout=1):
         batch_size = self.labels.shape[0]
         if self.labels.size == self.out.size:  # one-hot
             dx = (self.out - self.labels) / batch_size
@@ -110,4 +110,120 @@ class SoftmaxWithLossLayer(NNOperations):
             dx = self.labels.copy()
             dx[np.arange(batch_size), self.labels] -= 1
             dx = dx / batch_size
+        return dx
+
+
+class ConvolutionLayer(NNOperations):
+    def __init__(self, W, b, stride=1, padding=0):
+        self.W = W  # parameters of convolution filter
+        self.b = b
+        self.stride = stride
+        self.padding = padding
+
+        self.x = None
+        self.col = None
+        self.col_W = None
+
+        self.dW = None
+        self.db = None
+
+    def forward(self, x):
+        """Applies product-sum operation filter.
+
+        Computes inner products between input image matrix and filter matrix.
+        im2col() function is used for transposing input as 2 dim matrix
+        to culculate them efficiently.
+
+
+        x : 4 dimentional matrix as (num, channels, height, width)
+
+        Returns
+          4 dimentional matrix as (num, channels, height, width)
+        """
+        FN, C, FH, FW = self.W.shape
+        N, C, H, W = x.shape
+        out_h = int(1 + (H + 2*self.padding - FH) / self.stride)
+        out_w = int(1 + (W + 2*self.padding - FW) / self.stride)
+
+        col = self.im2col(x, FH, FW, self.stride, self.padding)
+        col_W = self.W.reshape(FN, -1).T
+        out = np.dot(col, col_W) + self.b
+
+        self.x = x
+        self.col = col
+        self.col_W = col_W
+
+        out = out.reshape(N, out_h, out_w, -1).transpose(0, 3, 1, 2)
+        return out
+
+    def backward(self, dout):
+        FN, C, FH, FW = self.W.shape
+        dout = dout.transpose(0, 2, 3, 1).reshape(-1, FN)
+
+        self.db = np.sum(dout, axis=0)
+        self.dW = np.dot(self.col.T, dout)
+        self.dW = self.dW.transpose(1, 0).reshape(FN, C, FH, FW)
+
+        dcol = np.dot(dout, self.col_W.T)
+        dx = self.col2im(dcol, self.x.shape, FH, FW, self.stride, self.padding)
+        return dx
+
+
+class PoolingLayer(NNOperations):
+    def __init__(self, pool_h, pool_w, stride=1, padding=0):
+        self.pool_h = pool_h
+        self.pool_w = pool_w
+        self.stride = stride
+        self.padding = padding
+
+        self.x = None
+        self.arg_max = None
+
+    def forward(self, x):
+        """Applies maximum extraction operation filter.
+
+        Computes inner products between input image matrix and filter matrix.
+        im2col() function is used for transposing input as 2 dim matrix
+        to culculate them efficiently.
+
+
+        x : 4 dimentional matrix as (num, channels, height, width)
+
+        Returns
+          4 dimentional matrix as (num, channels, height, width)
+        """
+        N, C, H, W = x.shape
+        out_h = int(1 + (H - self.pool_h) / self.stride)
+        out_w = int(1 + (W - self.pool_w) / self.stride)
+
+        col = self.im2col(
+            x, self.pool_h, self.pool_w, self.stride, self.padding)
+        col = col.reshape(-1, self.pool_h*self.pool_w)
+
+        arg_max = np.argmax(col, axis=1)
+        out = np.max(col, axis=1)
+        out = out.reshape(N, out_h, out_w, C).transpose(0, 3, 1, 2)
+
+        self.x = x
+        self.arg_max = arg_max
+
+        return out
+
+    def backward(self, dout):
+        dout = dout.transpose(0, 2, 3, 1)
+
+        pool_size = self.pool_h * self.pool_w
+        dmax = np.zeros((dout.size, pool_size))
+        dmax[np.arange(self.arg_max.size), self.arg_max.flatten()] =\
+            dout.flatten()
+        dmax = dmax.reshape(dout.shape + (pool_size,))
+
+        dcol = dmax.reshape(dmax.shape[0] * dmax.shape[1] * dmax.shape[2], -1)
+        dx = self.col2im(
+            dcol,
+            self.x.shape,
+            self.pool_h,
+            self.pool_w,
+            self.stride,
+            self.padding)
         return dx

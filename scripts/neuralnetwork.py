@@ -12,6 +12,8 @@ from nnoperations import NNOperations
 from layers import ReLULayer
 from layers import HiddenLayer
 from layers import SoftmaxWithLossLayer
+from layers import ConvolutionLayer
+from layers import PoolingLayer
 
 
 class NeuralNetwork(NNOperations):
@@ -76,15 +78,91 @@ class NeuralNetwork(NNOperations):
         layers = list(self.layers.values())
         layers.append(self.lastLayer)
         layers.reverse()
-        out = 1
+        dout = 1
         for layer in layers:
-            out = layer.backward(out)
+            dout = layer.backward(dout)
 
         grads = {}
         grads['W1'] = self.layers['Hidden1'].dW
         grads['b1'] = self.layers['Hidden1'].db
         grads['W2'] = self.layers['Hidden2'].dW
         grads['b2'] = self.layers['Hidden2'].db
+
+        return grads
+
+
+class SimpleConvolutionNetwork(NeuralNetwork):
+    def __init__(
+            self,
+            input_size=(1, 28, 28),
+            filter_num=30,
+            filter_size=5,
+            filter_padding=0,
+            filter_stride=1,
+            hidden_size=100,
+            output_size=10,
+            init_weight=0.01):
+
+        convolution_output_size =\
+            (input_size[1] - filter_size + 2*filter_padding) /\
+            filter_stride + 1
+        pooling_output_size =\
+            int(filter_num *
+                (convolution_output_size / 2) * (convolution_output_size / 2))
+
+        # set params
+        self.params = {}
+        self.params['W1'] = init_weight * np.random.randn(
+            filter_num, input_size[0], filter_size, filter_size)
+        self.params['b1'] = np.zeros(filter_num)
+        self.params['W2'] = init_weight * np.random.randn(
+            pooling_output_size, hidden_size)
+        self.params['b2'] = np.zeros(hidden_size)
+        self.params['W3'] = init_weight * np.random.randn(
+            hidden_size, output_size)
+        self.params['b3'] = np.zeros(output_size)
+
+        # set layers
+        self.layers = OrderedDict()
+        self.layers['Convolution1'] = ConvolutionLayer(
+            self.params['W1'],
+            self.params['b1'],
+            filter_stride,
+            filter_padding)
+        self.layers['ReLU1'] = ReLULayer()
+        self.layers['Pooling1'] = PoolingLayer(pool_h=2, pool_w=2, stride=2)
+        self.layers['Hidden1'] = HiddenLayer(
+            self.params['W2'], self.params['b2'])
+        self.layers['ReLU2'] = ReLULayer()
+        self.layers['Hidden2'] = HiddenLayer(
+            self.params['W3'], self.params['b3'])
+        self.lastLayer = SoftmaxWithLossLayer()
+
+    def computeGradientWithBackPropagation(self, x, t):
+        """Compute Gradient with Back Propagation.
+
+        x: input data
+        t: labeled data
+        """
+
+        # forward
+        self.computeCost(self.forward(x), t)
+
+        # backward
+        layers = list(self.layers.values())
+        layers.append(self.lastLayer)
+        layers.reverse()
+        out = 1
+        for layer in layers:
+            out = layer.backward(out)
+
+        grads = {}
+        grads['W1'] = self.layers['Convolution1'].dW
+        grads['b1'] = self.layers['Convolution1'].db
+        grads['W2'] = self.layers['Hidden1'].dW
+        grads['b2'] = self.layers['Hidden1'].db
+        grads['W3'] = self.layers['Hidden2'].dW
+        grads['b3'] = self.layers['Hidden2'].db
 
         return grads
 
@@ -102,12 +180,14 @@ if __name__ == '__main__':
     train_images, train_labels, test_images, test_labels = loader.load(
         image_size=IMAGE_SIZE,
         should_normalize=True,
-        should_flatten=True,
+        should_flatten=False,
         should_label_be_one_hot=True)
 
     # create neural network with 784 input dimentions
-    nn = NeuralNetwork(
-        input_size=IMAGE_SIZE, hidden_size=50, output_size=10)
+
+    # nn = NeuralNetwork(
+    #    input_size=IMAGE_SIZE, hidden_size=50, output_size=10)
+    nn = SimpleConvolutionNetwork()
 
     # learn & update weights
     costs = []
@@ -121,6 +201,7 @@ if __name__ == '__main__':
         t_batch = train_labels[batch_mask]
 
         # grads = nn.computeNumericalGradients(x_batch, t_batch)
+        # grads = nn.computeGradientWithBackPropagation(x_batch, t_batch)
         grads = nn.computeGradientWithBackPropagation(x_batch, t_batch)
 
         for key in ('W1', 'b1', 'W2', 'b2'):

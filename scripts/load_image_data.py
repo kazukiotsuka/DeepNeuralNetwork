@@ -90,8 +90,8 @@ class LoadImageData(object):
             train_images /= 255.0
 
         if not should_flatten:
-            test_images.reshape(-1, 1, 28, 28)
-            train_images.reshape(-1, 1, 28, 28)
+            test_images = test_images.reshape(-1, 1, 28, 28)
+            train_images = train_images.reshape(-1, 1, 28, 28)
 
         if should_label_be_one_hot:
             test_labels = self.convertLabelsToOntHot(test_labels)
