@@ -14,9 +14,14 @@ from layers import HiddenLayer
 from layers import SoftmaxWithLossLayer
 from layers import ConvolutionLayer
 from layers import PoolingLayer
+from optimizers import SGD
+from optimizers import Momentum
+from optimizers import AdaGrad
+from optimizers import Adam
 
 
 class NeuralNetwork(NNOperations):
+    PARAMS_KEYS = ('W1', 'b1', 'W2', 'b2')
 
     def __init__(
             self, input_size, hidden_size, output_size, init_weight=0.01):
@@ -90,8 +95,72 @@ class NeuralNetwork(NNOperations):
 
         return grads
 
+    def fit(
+            self,
+            train_images,
+            train_labels,
+            test_images,
+            test_labels,
+            method='Adam',
+            iters_num=10000,
+            batch_size=100,
+            learning_rate=0.01,
+            momentum=0.9,
+            beta1=0.9,
+            beta2=0.999):
+        """Fits weight paramters by using optimization algorithm.
+        """
+
+        costs = []
+        train_accuracies = []
+        test_accuracies = []
+
+        ITERS_NUM = iters_num
+        BATCH_SIZE = batch_size
+        ITER_PER_EPOC = max(train_images.shape[0]/BATCH_SIZE, 1)
+
+        if method == 'SGD':
+            optimizer = SGD(learning_rate=learning_rate)
+        elif method == 'Momentum':
+            optimizer = Momentum(
+                learning_rate=learning_rate, momentum=momentum)
+        elif method == 'AdaGrad':
+            optimizer = AdaGrad(
+                learning_rate=learning_rate)
+        elif method == 'Adam':
+            optimizer = Adam(
+                learning_rate=learning_rate,
+                beta1=beta1,
+                beta2=beta2)
+        else:
+            print('[WARNING] method name {} is not defined.'.format(method))
+
+        for i in range(ITERS_NUM):
+            batch_mask = np.random.choice(train_images.shape[0], BATCH_SIZE)
+            x_batch = train_images[batch_mask]
+            t_batch = train_labels[batch_mask]
+
+            grads = nn.computeGradientWithBackPropagation(x_batch, t_batch)
+            optimizer.update(nn.params, grads)
+
+            costs.append(nn.computeCost(nn.forward(x_batch), t_batch))
+            print('cost {}'.format(costs[-1]))
+
+            # check accuracy
+            if i % ITER_PER_EPOC == 0:
+                train_accuracies.append(
+                    nn.computeAccuracy(train_images, train_labels))
+                test_accuracies.append(
+                    nn.computeAccuracy(test_images, test_labels))
+                print("train accuracy {}, test accuracy {}".format(
+                    train_accuracies[-1], test_accuracies[-1]))
+
+        return costs, train_accuracies, test_accuracies
+
 
 class SimpleConvolutionNetwork(NeuralNetwork):
+    PARAMS_KEYS = ('W1', 'b1', 'W2', 'b2', 'W3', 'b3')
+
     def __init__(
             self,
             input_size=(1, 28, 28),
@@ -185,39 +254,30 @@ if __name__ == '__main__':
 
     # create neural network with 784 input dimentions
 
-    # nn = NeuralNetwork(
-    #    input_size=IMAGE_SIZE, hidden_size=50, output_size=10)
-    nn = SimpleConvolutionNetwork()
+    nn = NeuralNetwork(
+        input_size=IMAGE_SIZE, hidden_size=50, output_size=10)
+    # nn = SimpleConvolutionNetwork(
+    #     input_size=(1, 28, 28),
+    #     filter_num=30,
+    #     filter_size=5,
+    #     filter_padding=0,
+    #     filter_stride=1,
+    #     hidden_size=100,
+    #     output_size=10,
+    #     init_weight=0.01)
 
     # learn & update weights
-    costs = []
-    train_accuracies = []
-    test_accuracies = []
-    ITER_PER_EPOC = max(train_images.shape[0]/BATCH_SIZE, 1)
-
-    for i in range(ITERS_NUM):
-        batch_mask = np.random.choice(train_images.shape[0], BATCH_SIZE)
-        x_batch = train_images[batch_mask]
-        t_batch = train_labels[batch_mask]
-
-        # grads = nn.computeNumericalGradients(x_batch, t_batch)
-        # grads = nn.computeGradientWithBackPropagation(x_batch, t_batch)
-        grads = nn.computeGradientWithBackPropagation(x_batch, t_batch)
-
-        for key in ('W1', 'b1', 'W2', 'b2'):
-            nn.params[key] -= LEARNING_RATE * grads[key]
-
-        costs.append(nn.computeCost(nn.forward(x_batch), t_batch))
-        print('cost {}'.format(costs[-1]))
-
-        # check accuracy
-        if i % ITER_PER_EPOC == 0:
-            train_accuracies.append(
-                nn.computeAccuracy(train_images, train_labels))
-            test_accuracies.append(
-                nn.computeAccuracy(test_images, test_labels))
-            print("train accuracy {}, test accuracy {}".format(
-                train_accuracies[-1], test_accuracies[-1]))
+    costs, train_accuracies, test_accuracies = nn.fit(
+        train_images=train_images,
+        train_labels=train_labels,
+        test_images=test_images,
+        test_labels=test_labels,
+        method='Adam',
+        learning_rate=0.1,
+        iters_num=10000,
+        batch_size=100,
+        beta1=0.9,
+        beta2=0.999)
 
     plt.plot(np.arange(ITERS_NUM), costs)
     plt.axis([0, ITERS_NUM, 0, np.max(costs)])
