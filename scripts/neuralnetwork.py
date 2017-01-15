@@ -63,7 +63,8 @@ class NeuralNetwork(NNOperations):
     def computeAccuracy(self, x, labels):
         """Compute Accuracy.
         """
-        ans = np.argmax(self.forward(x), axis=1)
+        x = self.forward(x)
+        ans = np.argmax(x, axis=1)
         if labels.ndim != 1:
             label = np.argmax(labels, axis=1)
         accuracy = np.sum(ans == label) / float(x.shape[0])
@@ -101,13 +102,15 @@ class NeuralNetwork(NNOperations):
             train_labels,
             test_images,
             test_labels,
-            method='Adam',
+            optimization_method='Adam',
+            optimization_params={
+                'learning_rate': 0.01,
+                'momentum': 0.9,
+                'beta1': 0.9,
+                'beta2': 0.999},
             iters_num=10000,
-            batch_size=100,
-            learning_rate=0.01,
-            momentum=0.9,
-            beta1=0.9,
-            beta2=0.999):
+            mini_batch_size=100,
+            samples_num_evaluated_per_epoc=100):
         """Fits weight paramters by using optimization algorithm.
         """
 
@@ -116,27 +119,30 @@ class NeuralNetwork(NNOperations):
         test_accuracies = []
 
         ITERS_NUM = iters_num
-        BATCH_SIZE = batch_size
-        ITER_PER_EPOC = max(train_images.shape[0]/BATCH_SIZE, 1)
+        MINI_BATCH_SIZE = mini_batch_size
+        TRAIN_IMAGES_NUM = train_images.shape[0]
+        ITER_PER_EPOC = max(TRAIN_IMAGES_NUM/MINI_BATCH_SIZE, 1)
 
-        if method == 'SGD':
-            optimizer = SGD(learning_rate=learning_rate)
-        elif method == 'Momentum':
+        if optimization_method == 'SGD':
+            optimizer = SGD(learning_rate=optimization_params['learning_rate'])
+        elif optimization_method == 'Momentum':
             optimizer = Momentum(
-                learning_rate=learning_rate, momentum=momentum)
-        elif method == 'AdaGrad':
+                learning_rate=optimization_params['learning_rate'],
+                momentum=optimization_params['momentum'])
+        elif optimization_method == 'AdaGrad':
             optimizer = AdaGrad(
-                learning_rate=learning_rate)
-        elif method == 'Adam':
+                learning_rate=optimization_params['learning_rate'])
+        elif optimization_method == 'Adam':
             optimizer = Adam(
-                learning_rate=learning_rate,
-                beta1=beta1,
-                beta2=beta2)
+                learning_rate=optimization_params['learning_rate'],
+                beta1=optimization_params['beta1'],
+                beta2=optimization_params['beta2'])
         else:
-            print('[WARNING] method name {} is not defined.'.format(method))
+            print('[WARNING] method name {} is not defined.'.format(
+                optimization_method))
 
         for i in range(ITERS_NUM):
-            batch_mask = np.random.choice(train_images.shape[0], BATCH_SIZE)
+            batch_mask = np.random.choice(TRAIN_IMAGES_NUM, MINI_BATCH_SIZE)
             x_batch = train_images[batch_mask]
             t_batch = train_labels[batch_mask]
 
@@ -148,10 +154,17 @@ class NeuralNetwork(NNOperations):
 
             # check accuracy
             if i % ITER_PER_EPOC == 0:
+                print('=========ITERATION {}=========='.format(i))
+                if samples_num_evaluated_per_epoc is None:
+                    samples_num_evaluated_per_epoc = -1
                 train_accuracies.append(
-                    nn.computeAccuracy(train_images, train_labels))
+                    nn.computeAccuracy(
+                        train_images[:samples_num_evaluated_per_epoc],
+                        train_labels[:samples_num_evaluated_per_epoc]))
                 test_accuracies.append(
-                    nn.computeAccuracy(test_images, test_labels))
+                    nn.computeAccuracy(
+                        test_images[:samples_num_evaluated_per_epoc],
+                        test_labels[:samples_num_evaluated_per_epoc]))
                 print("train accuracy {}, test accuracy {}".format(
                     train_accuracies[-1], test_accuracies[-1]))
 
@@ -221,9 +234,9 @@ class SimpleConvolutionNetwork(NeuralNetwork):
         layers = list(self.layers.values())
         layers.append(self.lastLayer)
         layers.reverse()
-        out = 1
+        dout = 1
         for layer in layers:
-            out = layer.backward(out)
+            dout = layer.backward(dout)
 
         grads = {}
         grads['W1'] = self.layers['Convolution1'].dW
@@ -241,8 +254,7 @@ if __name__ == '__main__':
     # settings
     IMAGE_SIZE = 784
     ITERS_NUM = 10000
-    BATCH_SIZE = 100
-    LEARNING_RATE = 0.1
+    MINI_BATCH_SIZE = 100
 
     # load training and test data
     loader = LoadImageData('mnist')
@@ -254,17 +266,18 @@ if __name__ == '__main__':
 
     # create neural network with 784 input dimentions
 
-    nn = NeuralNetwork(
-        input_size=IMAGE_SIZE, hidden_size=50, output_size=10)
-    # nn = SimpleConvolutionNetwork(
-    #     input_size=(1, 28, 28),
-    #     filter_num=30,
-    #     filter_size=5,
-    #     filter_padding=0,
-    #     filter_stride=1,
-    #     hidden_size=100,
-    #     output_size=10,
-    #     init_weight=0.01)
+    # nn = NeuralNetwork(
+    #     input_size=IMAGE_SIZE, hidden_size=50, output_size=10)
+
+    nn = SimpleConvolutionNetwork(
+        input_size=(1, 28, 28),
+        filter_num=30,
+        filter_size=5,
+        filter_padding=0,
+        filter_stride=1,
+        hidden_size=100,
+        output_size=10,
+        init_weight=0.01)
 
     # learn & update weights
     costs, train_accuracies, test_accuracies = nn.fit(
@@ -272,12 +285,15 @@ if __name__ == '__main__':
         train_labels=train_labels,
         test_images=test_images,
         test_labels=test_labels,
-        method='Adam',
-        learning_rate=0.1,
-        iters_num=10000,
-        batch_size=100,
-        beta1=0.9,
-        beta2=0.999)
+        optimization_method='Adam',
+        optimization_params={
+            'learning_rate': 0.01,
+            'momentum': 0.9,
+            'beta1': 0.9,
+            'beta2': 0.999},
+        iters_num=ITERS_NUM,
+        mini_batch_size=MINI_BATCH_SIZE,
+        samples_num_evaluated_per_epoc=100)
 
     plt.plot(np.arange(ITERS_NUM), costs)
     plt.axis([0, ITERS_NUM, 0, np.max(costs)])

@@ -147,13 +147,14 @@ class ConvolutionLayer(NNOperations):
 
         col = self.im2col(x, FH, FW, self.stride, self.padding)
         col_W = self.W.reshape(FN, -1).T
+
         out = np.dot(col, col_W) + self.b
+        out = out.reshape(N, out_h, out_w, -1).transpose(0, 3, 1, 2)
 
         self.x = x
         self.col = col
         self.col_W = col_W
 
-        out = out.reshape(N, out_h, out_w, -1).transpose(0, 3, 1, 2)
         return out
 
     def backward(self, dout):

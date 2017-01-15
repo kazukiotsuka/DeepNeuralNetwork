@@ -103,6 +103,7 @@ class NNOperations():
             col : 2 dim array
         """
         N, C, H, W = input_data.shape
+
         out_h = (H + 2*padding - filter_h)//stride + 1
         out_w = (W + 2*padding - filter_w)//stride + 1
 
@@ -113,6 +114,7 @@ class NNOperations():
         col = np.zeros((N, C, filter_h, filter_w, out_h, out_w))
 
         for y in range(filter_h):
+
             y_max = y + stride*out_h
             for x in range(filter_w):
                 x_max = x + stride*out_w
