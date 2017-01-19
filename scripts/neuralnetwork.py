@@ -359,7 +359,58 @@ class DeepNeuralNetwork(ConvolutionNetwork):
             hidden_size=50,
             output_size=10):
 
-        pass
+        # set activation type
+        self.__activation_type__ = activation_type
+
+        # set layers
+        channel_num = input_size[0]
+        convolution_layers = []
+        for i, param in enumerate([
+                {'filter_num': 16, 'filter_size': 3, 'pad': 1, 'stride': 1},
+                {'filter_num': 16, 'filter_size': 3, 'pad': 1, 'stride': 1},
+                {'filter_num': 32, 'filter_size': 3, 'pad': 1, 'stride': 1},
+                {'filter_num': 32, 'filter_size': 3, 'pad': 2, 'stride': 1},
+                {'filter_num': 64, 'filter_size': 3, 'pad': 1, 'stride': 1},
+                {'filter_num': 64, 'filter_size': 4, 'pad': 1, 'stride': 1},
+                {'pre_node_num': 64*4*4, 'next_node_num': hidden_size},
+                {'pre_node_num': hidden_size, 'next_node_num': output_size},
+                ]):
+
+            # layer 1 ~ 6 Convolution Layer & ReLU Layer
+            if i+1 in range(1, 7):
+                # create convolution layer
+                convolution_layer = ConvolutionLayer(
+                    activation_type=self.__activation_type__,
+                    filter_num=param['filter_num'],
+                    channel_num=channel_num,
+                    filter_size=param['filter_size'])
+
+                self.params['W'+(i+1)] = convolution_layer.W
+                self.params['b'+(i+1)] = convolution_layer.b
+                self.layers.append(convolution_layer)
+                self.layers.append(ReLULayer())
+                # layer 4, 6 Pooling Layer
+                if i+1 in (4, 6):
+                    self.layers.append(
+                        PoolingLayer(pool_h=2, pool_w=2, stride=2))
+                # update next channel num
+                channel_num = convolution_layer.filter_num
+
+            # layer 7, 8 Hidden Layer & ReLU Layer & Dropout Layer
+            if i+1 in (7, 8):
+                hidden_layer = HiddenLayer(
+                    activation_type=self.__activation_type__,
+                    pre_node_num=param['pre_node_num'],
+                    next_node_num=param['next_node_num'])
+                self.params['W'+(i+1)] = hidden_layer.W
+                self.params['b'+(i+1)] = hidden_layer.b
+                self.layers.append(hidden_layer)
+                if i+1 == 7:
+                    self.layers.append(ReLULayer())
+                self.layers.append(DropoutLayer(0.5))
+
+            # last layer SoftmaxWithLoss Layer
+            self.lastLayer = SoftmaxWithLossLayer()
 
 if __name__ == '__main__':
 
