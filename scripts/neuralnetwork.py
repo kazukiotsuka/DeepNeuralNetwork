@@ -10,6 +10,7 @@ from enum import Enum
 from collections import OrderedDict
 from load_image_data import LoadImageData
 from nnoperations import NNOperations
+from nnoperations import ActivationType
 from layers import ReLULayer
 from layers import SigmoidLayer
 from layers import HiddenLayer
@@ -224,13 +225,9 @@ class NeuralNetwork(NNOperations):
         return self.activationNameFromType(self.__activation_type__)
 
 
-class ActivationType(Enum):
-    ReLU = 1
-    Sigmoid = 2
-
-
 class ConvolutionNetwork(NeuralNetwork):
     PARAMS_KEYS = ('W1', 'b1', 'W2', 'b2', 'W3', 'b3')
+    __activation_type = None
 
     def __init__(
             self,
@@ -254,28 +251,28 @@ class ConvolutionNetwork(NeuralNetwork):
                 (convolution_output_size / 2) * (convolution_output_size / 2))
 
         convolution_layer_1 = ConvolutionLayer(
-            init_std=self.initialWeightStd(
-                filter_num*input_size[0]*filter_size*filter_size),
+            activation_type=self.__activation_type__,
             filter_num=filter_num,
             channel_num=input_size[0],
             filter_size=filter_size)
 
         # set params
         self.params = {}
+        hidden_layer_1 = HiddenLayer(
+            activation_type=self.__activation_type__,
+            pre_node_num=pooling_output_size,
+            next_node_num=hidden_size)
+        hidden_layer_2 = HiddenLayer(
+            activation_type=self.__activation_type__,
+            pre_node_num=hidden_size,
+            next_node_num=output_size)
+
         self.params['W1'] = convolution_layer_1.W
         self.params['b1'] = convolution_layer_1.b
-        self.params['W2'] =\
-            self.initialWeightStd(
-                pooling_output_size*hidden_size) *\
-            np.random.randn(
-                pooling_output_size, hidden_size)
-        self.params['b2'] = np.zeros(hidden_size)
-        self.params['W3'] =\
-            self.initialWeightStd(
-                hidden_size*output_size) *\
-            np.random.randn(
-                hidden_size, output_size)
-        self.params['b3'] = np.zeros(output_size)
+        self.params['W2'] = hidden_layer_1.W
+        self.params['b2'] = hidden_layer_1.b
+        self.params['W3'] = hidden_layer_2.W
+        self.params['b3'] = hidden_layer_2.b
 
         # save init weights
         self.init_weights = []
@@ -288,26 +285,10 @@ class ConvolutionNetwork(NeuralNetwork):
         self.layers['Convolution1'] = convolution_layer_1
         self.layers['ReLU1'] = self.activationLayer()
         self.layers['Pooling1'] = PoolingLayer(pool_h=2, pool_w=2, stride=2)
-        self.layers['Hidden1'] = HiddenLayer(
-            self.params['W2'], self.params['b2'])
+        self.layers['Hidden1'] = hidden_layer_1
         self.layers['ReLU2'] = self.activationLayer()
-        self.layers['Hidden2'] = HiddenLayer(
-            self.params['W3'], self.params['b3'])
+        self.layers['Hidden2'] = hidden_layer_2
         self.lastLayer = SoftmaxWithLossLayer()
-
-    def initialWeightStd(self, node_num: int):
-        """Returns initial weight std.
-
-        node_num: The number of nodes connected with the weights.
-
-        When the activation type is ..
-        ReLU -> He
-        Sigmoid -> Xavier
-        """
-        if self.__activation_type__ == ActivationType.ReLU:
-            return np.sqrt(2.0 / node_num)
-        elif self.__activation_type__ == ActivationType.Sigmoid:
-            return np.sqrt(1.0 / node_num)
 
     def computeGradientWithBackPropagation(self, x, t):
         """Compute Gradient with Back Propagation.
@@ -368,6 +349,9 @@ class DeepNeuralNetwork(ConvolutionNetwork):
 
     (Softmax)
     """
+
+    __activation_type__ = None
+
     def __init__(
             self,
             input_size=(1, 28, 28),
@@ -376,8 +360,6 @@ class DeepNeuralNetwork(ConvolutionNetwork):
             output_size=10):
 
         pass
-
-
 
 if __name__ == '__main__':
 

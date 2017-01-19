@@ -5,9 +5,16 @@
 #
 
 import numpy as np
+from enum import Enum
+
+
+class ActivationType(Enum):
+    ReLU = 1
+    Sigmoid = 2
 
 
 class NNOperations():
+    __activation_type__ = None
 
     def softmax(self, x):
         """Softmax function.
@@ -154,3 +161,23 @@ class NNOperations():
                     col[:, :, y, x, :, :]
 
         return img[:, :, padding:H + padding, padding:W + padding]
+
+    def initialWeightStd(
+            self,
+            activation_type: ActivationType,
+            node_num: int):
+        """Returns initial weight std.
+
+        node_num: The number of nodes connected with the weights.
+
+        When the activation type is ..
+        ReLU -> He
+        Sigmoid -> Xavier
+        """
+        if activation_type in (ActivationType.ReLU, 'ReLU'):
+            return np.sqrt(2.0 / node_num)
+        elif activation_type in (ActivationType.Sigmoid, 'Sigmoid'):
+            return np.sqrt(1.0 / node_num)
+        else:
+            print('[WARNING] {} is invalid activation type'.format(
+                activation_type))

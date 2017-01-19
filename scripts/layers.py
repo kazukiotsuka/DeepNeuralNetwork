@@ -67,13 +67,26 @@ class SigmoidLayer():
         return dx
 
 
-class HiddenLayer():
-    def __init__(self, W, b):
-        self.W = W
-        self.b = b
+class HiddenLayer(NNOperations):
+    def __init__(
+            self,
+            activation_type,
+            pre_node_num,
+            next_node_num):
+        init_std = self.initialWeightStd(
+            activation_type=activation_type,
+            node_num=pre_node_num*next_node_num)
+        self.W = self._W(init_std, pre_node_num, next_node_num)
+        self.b = self._b(next_node_num)
         self.X = None
         self.dW = None
         self.db = None
+
+    def _W(self, init_std, pre_node_num, next_node_num):
+        return init_std * np.random.randn(pre_node_num, next_node_num)
+
+    def _b(self, next_node_num):
+        return np.zeros(next_node_num)
 
     def forward(self, X):
         self.original_x_shape = X.shape
@@ -116,15 +129,20 @@ class SoftmaxWithLossLayer(NNOperations):
 class ConvolutionLayer(NNOperations):
     def __init__(
             self,
-            init_std,
+            activation_type,
             filter_num=16,
             channel_num=1,
             filter_size=3,
             stride=1,
             padding=0):
+        init_std = self.initialWeightStd(
+            activation_type=activation_type,
+            node_num=filter_num*channel_num*filter_size*filter_size)
         self.W = self._W(
             filter_num, channel_num, filter_size, stride, padding, init_std)
         self.b = self._b(filter_num)
+        self.filter_num = filter_num
+        self.filter_size = filter_size
         self.stride = stride
         self.padding = padding
 
