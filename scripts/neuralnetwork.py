@@ -359,19 +359,20 @@ class DeepNeuralNetwork(ConvolutionNetwork):
             hidden_size=50,
             output_size=10):
 
-        # set activation type
+        # basic paramters
         self.__activation_type__ = activation_type
+        self.params = {}
+        self.layers = []
 
         # set layers
         channel_num = input_size[0]
-        convolution_layers = []
         for i, param in enumerate([
                 {'filter_num': 16, 'filter_size': 3, 'pad': 1, 'stride': 1},
                 {'filter_num': 16, 'filter_size': 3, 'pad': 1, 'stride': 1},
                 {'filter_num': 32, 'filter_size': 3, 'pad': 1, 'stride': 1},
                 {'filter_num': 32, 'filter_size': 3, 'pad': 2, 'stride': 1},
                 {'filter_num': 64, 'filter_size': 3, 'pad': 1, 'stride': 1},
-                {'filter_num': 64, 'filter_size': 4, 'pad': 1, 'stride': 1},
+                {'filter_num': 64, 'filter_size': 3, 'pad': 1, 'stride': 1},
                 {'pre_node_num': 64*4*4, 'next_node_num': hidden_size},
                 {'pre_node_num': hidden_size, 'next_node_num': output_size},
                 ]):
@@ -383,18 +384,18 @@ class DeepNeuralNetwork(ConvolutionNetwork):
                     activation_type=self.__activation_type__,
                     filter_num=param['filter_num'],
                     channel_num=channel_num,
-                    filter_size=param['filter_size'])
-
-                self.params['W'+(i+1)] = convolution_layer.W
-                self.params['b'+(i+1)] = convolution_layer.b
+                    filter_size=param['filter_size'],
+                    stride=param['stride'],
+                    padding=param['pad'])
                 self.layers.append(convolution_layer)
                 self.layers.append(ReLULayer())
-                # layer 4, 6 Pooling Layer
-                if i+1 in (4, 6):
+                # layer 2, 4, 6 Pooling Layer
+                if i+1 in (2, 4, 6):
                     self.layers.append(
                         PoolingLayer(pool_h=2, pool_w=2, stride=2))
                 # update next channel num
                 channel_num = convolution_layer.filter_num
+                layer = convolution_layer
 
             # layer 7, 8 Hidden Layer & ReLU Layer & Dropout Layer
             if i+1 in (7, 8):
@@ -402,15 +403,60 @@ class DeepNeuralNetwork(ConvolutionNetwork):
                     activation_type=self.__activation_type__,
                     pre_node_num=param['pre_node_num'],
                     next_node_num=param['next_node_num'])
-                self.params['W'+(i+1)] = hidden_layer.W
-                self.params['b'+(i+1)] = hidden_layer.b
                 self.layers.append(hidden_layer)
                 if i+1 == 7:
                     self.layers.append(ReLULayer())
                 self.layers.append(DropoutLayer(0.5))
+                layer = hidden_layer
 
-            # last layer SoftmaxWithLoss Layer
-            self.lastLayer = SoftmaxWithLossLayer()
+            # set W,b
+            self.params['W{}'.format(i+1)] = layer.W
+            self.params['b{}'.format(i+1)] = layer.b
+
+            print('layer {} created'.format(i))
+
+        print('{} layers created'.format(len(self.layers)))
+        # last layer SoftmaxWithLoss Layer
+        self.lastLayer = SoftmaxWithLossLayer()
+
+    def forward(self, X, is_train=False):
+        """Forward propagation.
+
+        x: input data
+        is_train: DropoutLayer effects only for traininig
+        """
+        for i, layer in enumerate(self.layers):
+            if isinstance(layer, DropoutLayer):
+                X = layer.forward(X, is_train)
+            else:
+                X = layer.forward(X)
+        return X
+
+    def computeGradientWithBackPropagation(self, x, t):
+        """Compute Gradient with Back Propagation.
+
+        x: input data
+        t: labeled data
+        """
+
+        # forward
+        self.computeCost(self.forward(x, is_train=True), t)
+
+        # backward
+        layers = self.layers.copy()
+        layers.append(self.lastLayer)
+        layers.reverse()
+        dout = 1
+        for i, layer in enumerate(layers):
+            dout = layer.backward(dout)
+
+        grads = {}
+        for i, layer_index in enumerate((0, 2, 5, 7, 10, 12, 15, 18)):
+            grads['W{}'.format(i+1)] = self.layers[layer_index].dW
+            grads['b{}'.format(i+1)] = self.layers[layer_index].db
+
+        return grads
+
 
 if __name__ == '__main__':
 
@@ -432,15 +478,21 @@ if __name__ == '__main__':
     # nn = NeuralNetwork(
     #     input_size=IMAGE_SIZE, hidden_size=50, output_size=10)
 
-    nn = ConvolutionNetwork(
+    # nn = ConvolutionNetwork(
+    #     input_size=(1, 28, 28),
+    #     filter_num=30,
+    #     filter_size=5,
+    #     filter_padding=0,
+    #     filter_stride=1,
+    #     hidden_size=100,
+    #     output_size=10,
+    #     init_weight=0.01)
+
+    nn = DeepNeuralNetwork(
         input_size=(1, 28, 28),
-        filter_num=30,
-        filter_size=5,
-        filter_padding=0,
-        filter_stride=1,
-        hidden_size=100,
-        output_size=10,
-        init_weight=0.01)
+        activation_type=ActivationType.ReLU,
+        hidden_size=50,
+        output_size=10)
 
     # learn & update weights
     costs, train_accuracies, test_accuracies = nn.fit(
