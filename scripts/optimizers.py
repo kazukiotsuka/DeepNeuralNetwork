@@ -5,6 +5,47 @@
 #
 
 import numpy as np
+from enum import Enum
+
+
+class OptimizationMethod(Enum):
+    SGD = 1
+    Momentum = 2
+    AdaGrad = 3
+    Adam = 4
+
+
+class Optimizer():
+
+    def __init__(self):
+        return
+
+    def optimizer(
+            self,
+            optimization_method=OptimizationMethod.Adam,
+            learning_rate=0.01,
+            momentum=0.9,
+            beta1=0.9,
+            beta2=0.999):
+
+        if optimization_method in (OptimizationMethod.SGD, 'SGD'):
+            return SGD(learning_rate=learning_rate)
+        elif optimization_method in (OptimizationMethod.Momentum, 'Momentum'):
+            return Momentum(
+                learning_rate=learning_rate,
+                momentum=momentum)
+        elif optimization_method in (OptimizationMethod.AdaGrad, 'AdaGrad'):
+            return AdaGrad(
+                learning_rate=learning_rate)
+        elif optimization_method in (OptimizationMethod.Adam, 'Adam'):
+            return Adam(
+                learning_rate=learning_rate,
+                beta1=beta1,
+                beta2=beta2)
+        else:
+            print('[WARNING] method {} is not defined.'.format(
+                optimization_method))
+            return None
 
 
 class SGD():

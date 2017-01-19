@@ -6,18 +6,18 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+from enum import Enum
 from collections import OrderedDict
 from load_image_data import LoadImageData
 from nnoperations import NNOperations
 from layers import ReLULayer
+from layers import SigmoidLayer
 from layers import HiddenLayer
 from layers import SoftmaxWithLossLayer
 from layers import ConvolutionLayer
 from layers import PoolingLayer
-from optimizers import SGD
-from optimizers import Momentum
-from optimizers import AdaGrad
-from optimizers import Adam
+from optimizers import Optimizer
+from optimizers import OptimizationMethod
 
 
 class NeuralNetwork(NNOperations):
@@ -102,7 +102,7 @@ class NeuralNetwork(NNOperations):
             train_labels,
             test_images,
             test_labels,
-            optimization_method='Adam',
+            optimization_method=OptimizationMethod.Adam,
             optimization_params={
                 'learning_rate': 0.01,
                 'momentum': 0.9,
@@ -123,23 +123,13 @@ class NeuralNetwork(NNOperations):
         TRAIN_IMAGES_NUM = train_images.shape[0]
         ITER_PER_EPOC = max(TRAIN_IMAGES_NUM/MINI_BATCH_SIZE, 1)
 
-        if optimization_method == 'SGD':
-            optimizer = SGD(learning_rate=optimization_params['learning_rate'])
-        elif optimization_method == 'Momentum':
-            optimizer = Momentum(
-                learning_rate=optimization_params['learning_rate'],
-                momentum=optimization_params['momentum'])
-        elif optimization_method == 'AdaGrad':
-            optimizer = AdaGrad(
-                learning_rate=optimization_params['learning_rate'])
-        elif optimization_method == 'Adam':
-            optimizer = Adam(
-                learning_rate=optimization_params['learning_rate'],
-                beta1=optimization_params['beta1'],
-                beta2=optimization_params['beta2'])
-        else:
-            print('[WARNING] method name {} is not defined.'.format(
-                optimization_method))
+        optimizer = Optimizer().optimizer(
+            optimization_method=optimization_method,
+            learning_rate=optimization_params.get('learning_rate'),
+            momentum=optimization_params.get('momentum'),
+            beta1=optimization_params.get('beta1'),
+            beta2=optimization_params.get('beta2'),
+            )
 
         for i in range(ITERS_NUM):
             batch_mask = np.random.choice(TRAIN_IMAGES_NUM, MINI_BATCH_SIZE)
@@ -170,6 +160,72 @@ class NeuralNetwork(NNOperations):
 
         return costs, train_accuracies, test_accuracies
 
+#    def showActivationsDistribution(self, X):
+#
+#        activation_layer = self.activationLayer()
+#
+#        activations = []
+#        # calculate activations
+#        for i, init_weight in enumerate(self.init_weights):
+#            print('{} {}'.format(i, init_weight.shape))
+#            # TODO: X, w のshapeを合わせるには通過信号を記録する必要がある
+#            activations.append(
+#                activation_layer.forward(
+#                    np.dot(X, init_weight)))
+#
+#        # plot histgram
+#        for i, activation in enumerate(activations):
+#            plt.subplot(1, len(activations), i+1)
+#            plt.title("layer {}".format(i+1))
+#            if i != 0:
+#                plt.yticks([], [])
+#                plt.xlim(0.1, 1)
+#                plt.ylim(0, 7000)
+#            plt.hist(
+#                init_weight.flatten(),
+#                30,
+#                range=(0, 1))
+#        plt.show()
+
+    def activationLayerFromType(self, activation_type):
+        """Return activation layer from ActivationType.
+
+        Returns an instance of
+        - ReLULayer
+        - SigmoidLayer
+        """
+        if activation_type == ActivationType.ReLU:
+            return ReLULayer()
+        elif activation_type == ActivationType.Sigmoid:
+            return SigmoidLayer()
+
+    def activationLayer(self):
+        """Returns activation layer of the NN instance.
+        """
+        return self.activationLayerFromType(self.activation_type)
+
+    def activationNameFromType(self, activation_type) -> str:
+        """Returns activation name from ActivationType.
+
+        Returns
+        - 'ReLU'
+        - 'Sigmoid;
+        """
+        if activation_type == ActivationType.ReLU:
+            return 'ReLU'
+        elif activation_type == ActivationType.Sigmoid:
+            return 'Sigmoid'
+
+    def activationName(self):
+        """Returns activation layer of the NN instance.
+        """
+        return self.activationNameFromType(self.activation_type)
+
+
+class ActivationType(Enum):
+    ReLU = 1
+    Sigmoid = 2
+
 
 class SimpleConvolutionNetwork(NeuralNetwork):
     PARAMS_KEYS = ('W1', 'b1', 'W2', 'b2', 'W3', 'b3')
@@ -177,6 +233,7 @@ class SimpleConvolutionNetwork(NeuralNetwork):
     def __init__(
             self,
             input_size=(1, 28, 28),
+            activation_type=ActivationType.ReLU,
             filter_num=30,
             filter_size=5,
             filter_padding=0,
@@ -204,18 +261,25 @@ class SimpleConvolutionNetwork(NeuralNetwork):
             hidden_size, output_size)
         self.params['b3'] = np.zeros(output_size)
 
+        # save init weights
+        self.init_weights = []
+        self.init_weights.append(self.params['W1'])
+        self.init_weights.append(self.params['W2'])
+        self.init_weights.append(self.params['W3'])
+
         # set layers
+        self.activation_type = activation_type
         self.layers = OrderedDict()
         self.layers['Convolution1'] = ConvolutionLayer(
             self.params['W1'],
             self.params['b1'],
             filter_stride,
             filter_padding)
-        self.layers['ReLU1'] = ReLULayer()
+        self.layers['ReLU1'] = self.activationLayer()
         self.layers['Pooling1'] = PoolingLayer(pool_h=2, pool_w=2, stride=2)
         self.layers['Hidden1'] = HiddenLayer(
             self.params['W2'], self.params['b2'])
-        self.layers['ReLU2'] = ReLULayer()
+        self.layers['ReLU2'] = self.activationLayer()
         self.layers['Hidden2'] = HiddenLayer(
             self.params['W3'], self.params['b3'])
         self.lastLayer = SoftmaxWithLossLayer()
@@ -248,12 +312,11 @@ class SimpleConvolutionNetwork(NeuralNetwork):
 
         return grads
 
-
 if __name__ == '__main__':
 
     # settings
     IMAGE_SIZE = 784
-    ITERS_NUM = 10000
+    ITERS_NUM = 100
     MINI_BATCH_SIZE = 100
 
     # load training and test data
@@ -285,7 +348,7 @@ if __name__ == '__main__':
         train_labels=train_labels,
         test_images=test_images,
         test_labels=test_labels,
-        optimization_method='Adam',
+        optimization_method=OptimizationMethod.Adam,
         optimization_params={
             'learning_rate': 0.01,
             'momentum': 0.9,
@@ -298,3 +361,6 @@ if __name__ == '__main__':
     plt.plot(np.arange(ITERS_NUM), costs)
     plt.axis([0, ITERS_NUM, 0, np.max(costs)])
     plt.show()
+
+    # check activations distibution
+    nn.showActivationsDistribution(train_images)
