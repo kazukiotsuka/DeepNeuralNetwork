@@ -21,6 +21,7 @@ from optimizers import OptimizationMethod
 
 
 class NeuralNetwork(NNOperations):
+    __activation_type__ = None
     PARAMS_KEYS = ('W1', 'b1', 'W2', 'b2')
 
     def __init__(
@@ -202,7 +203,7 @@ class NeuralNetwork(NNOperations):
     def activationLayer(self):
         """Returns activation layer of the NN instance.
         """
-        return self.activationLayerFromType(self.activation_type)
+        return self.activationLayerFromType(self.__activation_type__)
 
     def activationNameFromType(self, activation_type) -> str:
         """Returns activation name from ActivationType.
@@ -219,7 +220,7 @@ class NeuralNetwork(NNOperations):
     def activationName(self):
         """Returns activation layer of the NN instance.
         """
-        return self.activationNameFromType(self.activation_type)
+        return self.activationNameFromType(self.__activation_type__)
 
 
 class ActivationType(Enum):
@@ -242,6 +243,8 @@ class SimpleConvolutionNetwork(NeuralNetwork):
             output_size=10,
             init_weight=0.01):
 
+        self.__activation_type__ = activation_type
+
         convolution_output_size =\
             (input_size[1] - filter_size + 2*filter_padding) /\
             filter_stride + 1
@@ -251,14 +254,23 @@ class SimpleConvolutionNetwork(NeuralNetwork):
 
         # set params
         self.params = {}
-        self.params['W1'] = init_weight * np.random.randn(
-            filter_num, input_size[0], filter_size, filter_size)
+        self.params['W1'] =\
+            self.initialWeightStd(
+                filter_num*input_size[0]*filter_size*filter_size) *\
+            np.random.randn(
+                filter_num, input_size[0], filter_size, filter_size)
         self.params['b1'] = np.zeros(filter_num)
-        self.params['W2'] = init_weight * np.random.randn(
-            pooling_output_size, hidden_size)
+        self.params['W2'] =\
+            self.initialWeightStd(
+                pooling_output_size*hidden_size) *\
+            np.random.randn(
+                pooling_output_size, hidden_size)
         self.params['b2'] = np.zeros(hidden_size)
-        self.params['W3'] = init_weight * np.random.randn(
-            hidden_size, output_size)
+        self.params['W3'] =\
+            self.initialWeightStd(
+                hidden_size*output_size) *\
+            np.random.randn(
+                hidden_size, output_size)
         self.params['b3'] = np.zeros(output_size)
 
         # save init weights
@@ -268,7 +280,6 @@ class SimpleConvolutionNetwork(NeuralNetwork):
         self.init_weights.append(self.params['W3'])
 
         # set layers
-        self.activation_type = activation_type
         self.layers = OrderedDict()
         self.layers['Convolution1'] = ConvolutionLayer(
             self.params['W1'],
@@ -283,6 +294,20 @@ class SimpleConvolutionNetwork(NeuralNetwork):
         self.layers['Hidden2'] = HiddenLayer(
             self.params['W3'], self.params['b3'])
         self.lastLayer = SoftmaxWithLossLayer()
+
+    def initialWeightStd(self, node_num: int):
+        """Returns initial weight std.
+
+        node_num: The number of nodes connected with the weights.
+
+        When the activation type is ..
+        ReLU -> He
+        Sigmoid -> Xavier
+        """
+        if self.__activation_type__ == ActivationType.ReLU:
+            return np.sqrt(2.0 / node_num)
+        elif self.__activation_type__ == ActivationType.Sigmoid:
+            return np.sqrt(1.0 / node_num)
 
     def computeGradientWithBackPropagation(self, x, t):
         """Compute Gradient with Back Propagation.
@@ -363,4 +388,5 @@ if __name__ == '__main__':
     plt.show()
 
     # check activations distibution
-    nn.showActivationsDistribution(train_images)
+
+    # nn.showActivationsDistribution(train_images)
