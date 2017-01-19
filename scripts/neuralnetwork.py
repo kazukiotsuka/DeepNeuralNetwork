@@ -16,6 +16,7 @@ from layers import HiddenLayer
 from layers import SoftmaxWithLossLayer
 from layers import ConvolutionLayer
 from layers import PoolingLayer
+from layers import DropoutLayer
 from optimizers import Optimizer
 from optimizers import OptimizationMethod
 
@@ -228,7 +229,7 @@ class ActivationType(Enum):
     Sigmoid = 2
 
 
-class SimpleConvolutionNetwork(NeuralNetwork):
+class ConvolutionNetwork(NeuralNetwork):
     PARAMS_KEYS = ('W1', 'b1', 'W2', 'b2', 'W3', 'b3')
 
     def __init__(
@@ -252,14 +253,17 @@ class SimpleConvolutionNetwork(NeuralNetwork):
             int(filter_num *
                 (convolution_output_size / 2) * (convolution_output_size / 2))
 
+        convolution_layer_1 = ConvolutionLayer(
+            init_std=self.initialWeightStd(
+                filter_num*input_size[0]*filter_size*filter_size),
+            filter_num=filter_num,
+            channel_num=input_size[0],
+            filter_size=filter_size)
+
         # set params
         self.params = {}
-        self.params['W1'] =\
-            self.initialWeightStd(
-                filter_num*input_size[0]*filter_size*filter_size) *\
-            np.random.randn(
-                filter_num, input_size[0], filter_size, filter_size)
-        self.params['b1'] = np.zeros(filter_num)
+        self.params['W1'] = convolution_layer_1.W
+        self.params['b1'] = convolution_layer_1.b
         self.params['W2'] =\
             self.initialWeightStd(
                 pooling_output_size*hidden_size) *\
@@ -281,11 +285,7 @@ class SimpleConvolutionNetwork(NeuralNetwork):
 
         # set layers
         self.layers = OrderedDict()
-        self.layers['Convolution1'] = ConvolutionLayer(
-            self.params['W1'],
-            self.params['b1'],
-            filter_stride,
-            filter_padding)
+        self.layers['Convolution1'] = convolution_layer_1
         self.layers['ReLU1'] = self.activationLayer()
         self.layers['Pooling1'] = PoolingLayer(pool_h=2, pool_w=2, stride=2)
         self.layers['Hidden1'] = HiddenLayer(
@@ -337,6 +337,48 @@ class SimpleConvolutionNetwork(NeuralNetwork):
 
         return grads
 
+
+class DeepNeuralNetwork(ConvolutionNetwork):
+    """Deep Convolution Neural Network
+
+    *Network Structure
+
+    (Convolution1|filter num x 16, size 3 x 3, padding 1 stride 1)
+    (ReLU1)
+    (Convolution2|filter num x 16, size 3 x 3, padding 1 stride 1)
+    (ReLU2)
+    (Pooling1)
+    (Convolution3|filter num x 32, size 3 x 3, padding 1 stride 1)
+    (ReLU3)
+    (Convolution4|filter num x 32, size 3 x 3, padding 2 stride 1)
+    (ReLU4)
+    (Pooling|H:2, W:2, stride:2)
+
+    (Convolution5|filter num x 64, size 3 x 3, padding 1 stride 1)
+    (ReLU5)
+    (Convolution6|filter num x 64, size 3 x 3, padding 1 stride 1)
+    (ReLU6)
+    (Pooling|H:2, W:2, stride:2)
+
+    (Hidden1|hidden size:50)
+    (ReLU7)
+    (Dropout1)
+    (Hidden2|hidden size:50)
+    (Dropout2)
+
+    (Softmax)
+    """
+    def __init__(
+            self,
+            input_size=(1, 28, 28),
+            activation_type=ActivationType.ReLU,
+            hidden_size=50,
+            output_size=10):
+
+        pass
+
+
+
 if __name__ == '__main__':
 
     # settings
@@ -357,7 +399,7 @@ if __name__ == '__main__':
     # nn = NeuralNetwork(
     #     input_size=IMAGE_SIZE, hidden_size=50, output_size=10)
 
-    nn = SimpleConvolutionNetwork(
+    nn = ConvolutionNetwork(
         input_size=(1, 28, 28),
         filter_num=30,
         filter_size=5,

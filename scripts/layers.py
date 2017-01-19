@@ -114,9 +114,17 @@ class SoftmaxWithLossLayer(NNOperations):
 
 
 class ConvolutionLayer(NNOperations):
-    def __init__(self, W, b, stride=1, padding=0):
-        self.W = W  # parameters of convolution filter
-        self.b = b
+    def __init__(
+            self,
+            init_std,
+            filter_num=16,
+            channel_num=1,
+            filter_size=3,
+            stride=1,
+            padding=0):
+        self.W = self._W(
+            filter_num, channel_num, filter_size, stride, padding, init_std)
+        self.b = self._b(filter_num)
         self.stride = stride
         self.padding = padding
 
@@ -126,6 +134,20 @@ class ConvolutionLayer(NNOperations):
 
         self.dW = None
         self.db = None
+
+    def _W(
+            self,
+            filter_num,
+            channel_num,
+            filter_size,
+            stride,
+            padding,
+            init_std):
+        return init_std * np.random.randn(
+            filter_num, channel_num, filter_size, filter_size)
+
+    def _b(self, filter_num):
+        return np.zeros(filter_num)
 
     def forward(self, x):
         """Applies product-sum operation filter.
@@ -228,3 +250,19 @@ class PoolingLayer(NNOperations):
             self.stride,
             self.padding)
         return dx
+
+
+class DropoutLayer(NNOperations):
+    def __init__(self, dropout_ratio=0.5):
+        self.dropout_ratio = dropout_ratio
+        self.mask = None
+
+    def forward(self, x, is_train=True):
+        if is_train:
+            self.mask = np.random.rand(*x.shape) > self.dropout_ratio
+            return x * self.mask
+        else:
+            return x * (1.0 - self.dropout_ratio)
+
+    def backward(self, dout):
+        return dout * self.mask
