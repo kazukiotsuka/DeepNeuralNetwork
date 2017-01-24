@@ -49,6 +49,7 @@ def debug(is_debug=False, debug_level=DebugLevel.INFO):
                         non_zero_num, len(data.flatten())))
                     if non_zero_num == 0:
                         print('!!!!!!!!!!!! all zero !!!!!!!!!!!!!!!')
+                        print('[WARN] a suspected case of vanishing gradient.')
             return func(*args, **kwargs)
         return wrapper
     return _debug
@@ -140,7 +141,7 @@ class HiddenLayer(NNOperations, NNLayer):
         super().__init__(index)
         init_std = self.initialWeightStd(
             activation_type=activation_type,
-            node_num=pre_node_num*next_node_num)
+            pre_node_num=pre_node_num)
         self.W = self._W(init_std, pre_node_num, next_node_num)
         self.b = self._b(next_node_num)
         self.original_x_shape = None
@@ -214,7 +215,7 @@ class ConvolutionLayer(NNOperations, NNLayer):
         super().__init__(index)
         init_std = self.initialWeightStd(
             activation_type=activation_type,
-            node_num=filter_num*channel_num*filter_size*filter_size)
+            pre_node_num=channel_num*filter_size*filter_size)
         self.W = self._W(
             filter_num, channel_num, filter_size, stride, padding, init_std)
         self.b = self._b(filter_num)

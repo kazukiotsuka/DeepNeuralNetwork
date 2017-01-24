@@ -13,5 +13,5 @@ class DebugLevel(Enum):
 
 
 class Config():
-    IS_DEBUG = True
+    IS_DEBUG = False
     DEBUG_LEVEL = DebugLevel.DETAILS

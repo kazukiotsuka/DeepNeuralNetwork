@@ -433,9 +433,12 @@ class DeepNeuralNetwork(ConvolutionNetwork):
             self.params['b{}'.format(i+1)] = layer.b
 
             print('layer {} created'.format(i+1))
-            # print(self.params['W{}'.format(i+1)])
-            # print(layer.W)
-            # print(layer.b)
+
+            if Config.IS_DEBUG:
+                print('W{} shape : {}'.format(
+                    i+1, self.params['W{}'.format(i+1)].shape))
+                print('b{} shape : {}'.format(
+                    i+1, self.params['W{}'.format(i+1)].shape))
 
         # output created layer structures
         for layer in self.layers:
@@ -446,7 +449,7 @@ class DeepNeuralNetwork(ConvolutionNetwork):
         for j, layer in enumerate(self.layers):
             if isinstance(layer, (ConvolutionLayer, HiddenLayer)):
                 self.weight_layer_indexes.append(j)
-        print('weight_layer_indexes {}'.format(self.weight_layer_indexes))
+        self.debug('weight_layer_indexes {}'.format(self.weight_layer_indexes))
 
         print('{} layers created'.format(len(self.layers)))
         # last layer SoftmaxWithLoss Layer
@@ -492,7 +495,6 @@ class DeepNeuralNetwork(ConvolutionNetwork):
         x: input data
         t: labeled data
         """
-        print('computeGradientWithBackPropagation')
 
         # forward
         self.computeCost(
@@ -510,13 +512,6 @@ class DeepNeuralNetwork(ConvolutionNetwork):
             grads['W{}'.format(i+1)] = self.layers[layer_index].dW
             grads['b{}'.format(i+1)] = self.layers[layer_index].db
 
-        #for key,val in grads.items():
-        #    print(key)
-        #    print(val.flatten())
-        #    print('nonzero num {}/{}'.format(len(np.nonzero(val.flatten())[0]),len(val.flatten())))
-        #    # print('nonzero {}'.format(np.nonzero(val.flatten())[0]))
-
-        print('----------------  computeGradient done')
         return grads
 
 
@@ -533,27 +528,27 @@ if __name__ == '__main__':
         image_size=IMAGE_SIZE,
         should_normalize=True,
         should_flatten=False,
-        should_label_be_one_hot=False) #True)
+        should_label_be_one_hot=False)
 
     # create neural network with 784 input dimentions
 
     # nn = NeuralNetwork(
     #     input_size=IMAGE_SIZE, hidden_size=50, output_size=10)
 
-    nn = ConvolutionNetwork(
-        input_size=(1, 28, 28),
-        filter_num=30,
-        filter_size=5,
-        filter_padding=0,
-        filter_stride=1,
-        hidden_size=100,
-        output_size=10)
-
-    # nn = DeepNeuralNetwork(
+    # nn = ConvolutionNetwork(
     #     input_size=(1, 28, 28),
-    #     activation_type=ActivationType.ReLU,
-    #     hidden_size=50,
+    #     filter_num=30,
+    #     filter_size=5,
+    #     filter_padding=0,
+    #     filter_stride=1,
+    #     hidden_size=100,
     #     output_size=10)
+
+    nn = DeepNeuralNetwork(
+        input_size=(1, 28, 28),
+        activation_type=ActivationType.ReLU,
+        hidden_size=50,
+        output_size=10)
 
     # learn & update weights
     costs, train_accuracies, test_accuracies = nn.fit(
@@ -576,7 +571,3 @@ if __name__ == '__main__':
     plt.plot(np.arange(ITERS_NUM), costs)
     plt.axis([0, ITERS_NUM, 0, np.max(costs)])
     plt.show()
-
-    # check activations distibution
-
-    # nn.showActivationsDistribution(train_images)

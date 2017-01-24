@@ -6,6 +6,7 @@
 
 import numpy as np
 from enum import Enum
+from config import Config
 
 
 class ActivationType(Enum):
@@ -168,19 +169,25 @@ class NNOperations():
     def initialWeightStd(
             self,
             activation_type: ActivationType,
-            node_num: int):
+            pre_node_num: int):
         """Returns initial weight std.
 
-        node_num: The number of nodes connected with the weights.
+        pre_node_num: The number of nodes connected with the weights.
 
         When the activation type is ..
         ReLU -> He
         Sigmoid -> Xavier
         """
         if activation_type in (ActivationType.ReLU, 'ReLU'):
-            return np.sqrt(2.0 / node_num)
+            return np.sqrt(2.0 / pre_node_num)
         elif activation_type in (ActivationType.Sigmoid, 'Sigmoid'):
-            return np.sqrt(1.0 / node_num)
+            return np.sqrt(1.0 / pre_node_num)
         else:
             print('[WARNING] {} is invalid activation type'.format(
                 activation_type))
+
+    def debug(self, message):
+        """Stdout when Config.IS_DEBUG is True.
+        """
+        if Config.IS_DEBUG:
+            print(message)
