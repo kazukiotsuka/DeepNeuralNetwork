@@ -7,6 +7,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from enum import Enum
+from config import Config
+from config import DebugLevel
 from collections import OrderedDict
 from load_image_data import LoadImageData
 from nnoperations import NNOperations
@@ -46,14 +48,24 @@ class NeuralNetwork(NNOperations):
             self.params['W2'], self.params['b2'])
         self.lastLayer = SoftmaxWithLossLayer()
 
-    def forward(self, x):
+    def forward(self, X, is_activation_check=False):
         """Forward propagation.
 
         x: input data
         """
+        activations = []
         for key, layer in self.layers.items():
-            x = layer.forward(x)
-        return x
+            X = layer.forward(X)
+
+            # save activations
+            if is_activation_check and isinstance(
+                    layer, (ReLULayer, SigmoidLayer)):
+                activations.append((layer.name, X))
+
+        if is_activation_check:
+            self.showActivationsDistribution(activations)
+
+        return X
 
     def computeCost(self, y, t):
         """Compute Cost.
@@ -65,15 +77,19 @@ class NeuralNetwork(NNOperations):
 
     def computeAccuracy(self, x, labels):
         """Compute Accuracy.
+
+        x: training data
+        labels: correct labeles
         """
-        x = self.forward(x)
-        ans = np.argmax(x, axis=1)
-        if labels.ndim != 1:
-            label = np.argmax(labels, axis=1)
-        accuracy = np.sum(ans == label) / float(x.shape[0])
+        out = self.forward(x)
+        predictions = np.argmax(out, axis=1)
+        if labels.ndim != 1:  # one-hot
+            labels = np.argmax(labels, axis=1)
+        accuracy = np.sum(predictions == labels) / float(x.shape[0])
         return accuracy
 
-    def computeGradientWithBackPropagation(self, x, t):
+    def computeGradientWithBackPropagation(
+            self, x, t, is_activation_check=False):
         """Compute Gradient with Back Propagation.
 
         x: input data
@@ -81,7 +97,8 @@ class NeuralNetwork(NNOperations):
         """
 
         # forward
-        self.computeCost(self.forward(x), t)
+        self.computeCost(
+            self.forward(x, is_activation_check=is_activation_check), t)
 
         # backward
         layers = list(self.layers.values())
@@ -113,7 +130,8 @@ class NeuralNetwork(NNOperations):
                 'beta2': 0.999},
             iters_num=10000,
             mini_batch_size=100,
-            samples_num_evaluated_per_epoc=100):
+            samples_num_evaluated_per_epoc=100,
+            is_activation_check=False):
         """Fits weight paramters by using optimization algorithm.
         """
 
@@ -139,7 +157,8 @@ class NeuralNetwork(NNOperations):
             x_batch = train_images[batch_mask]
             t_batch = train_labels[batch_mask]
 
-            grads = nn.computeGradientWithBackPropagation(x_batch, t_batch)
+            grads = nn.computeGradientWithBackPropagation(
+                x_batch, t_batch, is_activation_check=is_activation_check)
             optimizer.update(nn.params, grads)
 
             costs.append(nn.computeCost(nn.forward(x_batch), t_batch))
@@ -163,34 +182,7 @@ class NeuralNetwork(NNOperations):
 
         return costs, train_accuracies, test_accuracies
 
-#    def showActivationsDistribution(self, X):
-#
-#        activation_layer = self.activationLayer()
-#
-#        activations = []
-#        # calculate activations
-#        for i, init_weight in enumerate(self.init_weights):
-#            print('{} {}'.format(i, init_weight.shape))
-#            # TODO: X, w のshapeを合わせるには通過信号を記録する必要がある
-#            activations.append(
-#                activation_layer.forward(
-#                    np.dot(X, init_weight)))
-#
-#        # plot histgram
-#        for i, activation in enumerate(activations):
-#            plt.subplot(1, len(activations), i+1)
-#            plt.title("layer {}".format(i+1))
-#            if i != 0:
-#                plt.yticks([], [])
-#                plt.xlim(0.1, 1)
-#                plt.ylim(0, 7000)
-#            plt.hist(
-#                init_weight.flatten(),
-#                30,
-#                range=(0, 1))
-#        plt.show()
-
-    def activationLayerFromType(self, activation_type):
+    def activationLayerFromType(self, activation_type, index=None):
         """Return activation layer from ActivationType.
 
         Returns an instance of
@@ -198,14 +190,17 @@ class NeuralNetwork(NNOperations):
         - SigmoidLayer
         """
         if activation_type == ActivationType.ReLU:
-            return ReLULayer()
+            return ReLULayer(index=index)
         elif activation_type == ActivationType.Sigmoid:
-            return SigmoidLayer()
+            return SigmoidLayer(index=index)
+        else:
+            print('[WARNING] activation_type {} is not recognized.'.format(
+                activation_type))
 
-    def activationLayer(self):
+    def activationLayer(self, index=None):
         """Returns activation layer of the NN instance.
         """
-        return self.activationLayerFromType(self.__activation_type__)
+        return self.activationLayerFromType(self.__activation_type__, index)
 
     def activationNameFromType(self, activation_type) -> str:
         """Returns activation name from ActivationType.
@@ -224,6 +219,20 @@ class NeuralNetwork(NNOperations):
         """
         return self.activationNameFromType(self.__activation_type__)
 
+    def showActivationsDistribution(self, activations: list):
+        """See activations distribution as hisgram.
+
+        activations: touple of (layer_name, layer_output)
+        """
+        for i, activation in enumerate(activations):
+            plt.subplot(1, len(activations), i+1)
+            plt.title(activation[0])
+            if i != 0:
+                plt.yticks([], [])
+            plt.hist(activation[1].flatten(), 30, range=(0, 1))
+        plt.show()
+        return
+
 
 class ConvolutionNetwork(NeuralNetwork):
     PARAMS_KEYS = ('W1', 'b1', 'W2', 'b2', 'W3', 'b3')
@@ -238,8 +247,7 @@ class ConvolutionNetwork(NeuralNetwork):
             filter_padding=0,
             filter_stride=1,
             hidden_size=100,
-            output_size=10,
-            init_weight=0.01):
+            output_size=10):
 
         self.__activation_type__ = activation_type
 
@@ -251,6 +259,7 @@ class ConvolutionNetwork(NeuralNetwork):
                 (convolution_output_size / 2) * (convolution_output_size / 2))
 
         convolution_layer_1 = ConvolutionLayer(
+            index=1,
             activation_type=self.__activation_type__,
             filter_num=filter_num,
             channel_num=input_size[0],
@@ -259,10 +268,12 @@ class ConvolutionNetwork(NeuralNetwork):
         # set params
         self.params = {}
         hidden_layer_1 = HiddenLayer(
+            index=1,
             activation_type=self.__activation_type__,
             pre_node_num=pooling_output_size,
             next_node_num=hidden_size)
         hidden_layer_2 = HiddenLayer(
+            index=2,
             activation_type=self.__activation_type__,
             pre_node_num=hidden_size,
             next_node_num=output_size)
@@ -283,14 +294,16 @@ class ConvolutionNetwork(NeuralNetwork):
         # set layers
         self.layers = OrderedDict()
         self.layers['Convolution1'] = convolution_layer_1
-        self.layers['ReLU1'] = self.activationLayer()
-        self.layers['Pooling1'] = PoolingLayer(pool_h=2, pool_w=2, stride=2)
+        self.layers['ReLU1'] = self.activationLayer(index=1)
+        self.layers['Pooling1'] = PoolingLayer(
+            index=1, pool_h=2, pool_w=2, stride=2)
         self.layers['Hidden1'] = hidden_layer_1
-        self.layers['ReLU2'] = self.activationLayer()
+        self.layers['ReLU2'] = self.activationLayer(index=2)
         self.layers['Hidden2'] = hidden_layer_2
         self.lastLayer = SoftmaxWithLossLayer()
 
-    def computeGradientWithBackPropagation(self, x, t):
+    def computeGradientWithBackPropagation(
+            self, x, t, is_activation_check=False):
         """Compute Gradient with Back Propagation.
 
         x: input data
@@ -298,7 +311,8 @@ class ConvolutionNetwork(NeuralNetwork):
         """
 
         # forward
-        self.computeCost(self.forward(x), t)
+        self.computeCost(
+            self.forward(x, is_activation_check=is_activation_check), t)
 
         # backward
         layers = list(self.layers.values())
@@ -381,6 +395,7 @@ class DeepNeuralNetwork(ConvolutionNetwork):
             if i+1 in range(1, 7):
                 # create convolution layer
                 convolution_layer = ConvolutionLayer(
+                    index=i+1,
                     activation_type=self.__activation_type__,
                     filter_num=param['filter_num'],
                     channel_num=channel_num,
@@ -388,11 +403,12 @@ class DeepNeuralNetwork(ConvolutionNetwork):
                     stride=param['stride'],
                     padding=param['pad'])
                 self.layers.append(convolution_layer)
-                self.layers.append(ReLULayer())
+                self.layers.append(
+                    self.activationLayerFromType(activation_type, index=i+1))
                 # layer 2, 4, 6 Pooling Layer
                 if i+1 in (2, 4, 6):
                     self.layers.append(
-                        PoolingLayer(pool_h=2, pool_w=2, stride=2))
+                        PoolingLayer(index=i+1, pool_h=2, pool_w=2, stride=2))
                 # update next channel num
                 channel_num = convolution_layer.filter_num
                 layer = convolution_layer
@@ -400,48 +416,66 @@ class DeepNeuralNetwork(ConvolutionNetwork):
             # layer 7, 8 Hidden Layer & ReLU Layer & Dropout Layer
             if i+1 in (7, 8):
                 hidden_layer = HiddenLayer(
+                    index=i+1,
                     activation_type=self.__activation_type__,
                     pre_node_num=param['pre_node_num'],
                     next_node_num=param['next_node_num'])
                 self.layers.append(hidden_layer)
                 if i+1 == 7:
-                    self.layers.append(ReLULayer())
-                self.layers.append(DropoutLayer(0.5))
+                    self.layers.append(
+                        self.activationLayerFromType(
+                            activation_type, index=i+1))
+                self.layers.append(DropoutLayer(index=i+1, dropout_ratio=0.5))
                 layer = hidden_layer
 
             # set W,b
             self.params['W{}'.format(i+1)] = layer.W
             self.params['b{}'.format(i+1)] = layer.b
 
-            print('layer {} created'.format(i))
+            print('layer {} created'.format(i+1))
+            # print(self.params['W{}'.format(i+1)])
+            # print(layer.W)
+            # print(layer.b)
+
+        # output created layer structures
+        for layer in self.layers:
+            print(layer.name)
+
+        # keep weight required layer indexes
+        self.weight_layer_indexes = []
+        for j, layer in enumerate(self.layers):
+            if isinstance(layer, (ConvolutionLayer, HiddenLayer)):
+                self.weight_layer_indexes.append(j)
+        print('weight_layer_indexes {}'.format(self.weight_layer_indexes))
 
         print('{} layers created'.format(len(self.layers)))
         # last layer SoftmaxWithLoss Layer
         self.lastLayer = SoftmaxWithLossLayer()
 
-    def forward(self, X, is_train=False):
+    def forward(self, X, is_train=False, is_activation_check=False):
         """Forward propagation.
 
         x: input data
-        is_train: DropoutLayer effects only for traininig
         """
+        activations = []
         for i, layer in enumerate(self.layers):
             if isinstance(layer, DropoutLayer):
                 X = layer.forward(X, is_train)
             else:
                 X = layer.forward(X)
+            # save activations
+            if is_activation_check and isinstance(
+                    layer, (ReLULayer, SigmoidLayer)):
+                activations.append((layer.name, X))
+
+        if is_activation_check:
+            self.showActivationsDistribution(activations)
+
         return X
 
-    def computeGradientWithBackPropagation(self, x, t):
-        """Compute Gradient with Back Propagation.
-
-        x: input data
-        t: labeled data
+    def backward(self):
+        """Back propagation.
         """
-
-        # forward
-        self.computeCost(self.forward(x, is_train=True), t)
-
         # backward
         layers = self.layers.copy()
         layers.append(self.lastLayer)
@@ -449,12 +483,40 @@ class DeepNeuralNetwork(ConvolutionNetwork):
         dout = 1
         for i, layer in enumerate(layers):
             dout = layer.backward(dout)
+        return
+
+    def computeGradientWithBackPropagation(
+            self, x, t, is_activation_check=False):
+        """Compute Gradient with Back Propagation.
+
+        x: input data
+        t: labeled data
+        """
+        print('computeGradientWithBackPropagation')
+
+        # forward
+        self.computeCost(
+            self.forward(
+                x,
+                is_train=True,
+                is_activation_check=is_activation_check),
+            t)
+
+        # backward
+        self.backward()
 
         grads = {}
-        for i, layer_index in enumerate((0, 2, 5, 7, 10, 12, 15, 18)):
+        for i, layer_index in enumerate(self.weight_layer_indexes):
             grads['W{}'.format(i+1)] = self.layers[layer_index].dW
             grads['b{}'.format(i+1)] = self.layers[layer_index].db
 
+        #for key,val in grads.items():
+        #    print(key)
+        #    print(val.flatten())
+        #    print('nonzero num {}/{}'.format(len(np.nonzero(val.flatten())[0]),len(val.flatten())))
+        #    # print('nonzero {}'.format(np.nonzero(val.flatten())[0]))
+
+        print('----------------  computeGradient done')
         return grads
 
 
@@ -462,7 +524,7 @@ if __name__ == '__main__':
 
     # settings
     IMAGE_SIZE = 784
-    ITERS_NUM = 100
+    ITERS_NUM = 1000
     MINI_BATCH_SIZE = 100
 
     # load training and test data
@@ -471,28 +533,27 @@ if __name__ == '__main__':
         image_size=IMAGE_SIZE,
         should_normalize=True,
         should_flatten=False,
-        should_label_be_one_hot=True)
+        should_label_be_one_hot=False) #True)
 
     # create neural network with 784 input dimentions
 
     # nn = NeuralNetwork(
     #     input_size=IMAGE_SIZE, hidden_size=50, output_size=10)
 
-    # nn = ConvolutionNetwork(
-    #     input_size=(1, 28, 28),
-    #     filter_num=30,
-    #     filter_size=5,
-    #     filter_padding=0,
-    #     filter_stride=1,
-    #     hidden_size=100,
-    #     output_size=10,
-    #     init_weight=0.01)
-
-    nn = DeepNeuralNetwork(
+    nn = ConvolutionNetwork(
         input_size=(1, 28, 28),
-        activation_type=ActivationType.ReLU,
-        hidden_size=50,
+        filter_num=30,
+        filter_size=5,
+        filter_padding=0,
+        filter_stride=1,
+        hidden_size=100,
         output_size=10)
+
+    # nn = DeepNeuralNetwork(
+    #     input_size=(1, 28, 28),
+    #     activation_type=ActivationType.ReLU,
+    #     hidden_size=50,
+    #     output_size=10)
 
     # learn & update weights
     costs, train_accuracies, test_accuracies = nn.fit(
@@ -503,12 +564,14 @@ if __name__ == '__main__':
         optimization_method=OptimizationMethod.Adam,
         optimization_params={
             'learning_rate': 0.01,
-            'momentum': 0.9,
             'beta1': 0.9,
             'beta2': 0.999},
         iters_num=ITERS_NUM,
         mini_batch_size=MINI_BATCH_SIZE,
-        samples_num_evaluated_per_epoc=100)
+        samples_num_evaluated_per_epoc=100,
+        is_activation_check=(
+            Config.IS_DEBUG and
+            Config.DEBUG_LEVEL.value > DebugLevel.INFO.value))
 
     plt.plot(np.arange(ITERS_NUM), costs)
     plt.axis([0, ITERS_NUM, 0, np.max(costs)])

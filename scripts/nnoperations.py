@@ -55,8 +55,11 @@ class NNOperations():
             t = t.reshape(1, t.size)
             y = y.reshape(1, y.size)
 
-        delta = 1e-7  # avoid -INF when log(0)
-        return -np.sum(t * np.log(y + delta))
+        if t.size == y.size:  # one-hot-vector
+            t = t.argmax(axis=1)
+
+        batch_size = y.shape[0]
+        return -np.sum(np.log(y[np.arange(batch_size), t])) / batch_size
 
     def numericalGradient(self, f, x):
         """Numerical Gradient.
